@@ -39,3 +39,31 @@ export const safePoints = pgTable('safe_points', {
   lng: doublePrecision('lng').notNull(),
   verified: boolean('verified').notNull().default(true),
 });
+
+export const journeys = pgTable('journeys', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  destinationLat: doublePrecision('destination_lat').notNull(),
+  destinationLng: doublePrecision('destination_lng').notNull(),
+  expectedArrival: timestamp('expected_arrival').notNull(),
+  status: text('status').notNull().default('active'), // active, completed, escalated
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const journeyPings = pgTable('journey_pings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  journeyId: text('journey_id').notNull().references(() => journeys.id, { onDelete: 'cascade' }),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+});
+
+export const communityReports = pgTable('community_reports', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  category: text('category').notNull(), // e.g. "Poor Lighting", "Harassment"
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+

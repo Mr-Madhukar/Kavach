@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { ShieldAlert, Map as MapIcon, LogOut, Phone, Navigation } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ShieldAlert, Map as MapIcon, LogOut, Phone, Navigation, AlertTriangle } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export default function HomeDashboard() {
   const router = useRouter();
   const [alertActive, setAlertActive] = useState(false);
+  const [reports, setReports] = useState<{ id: string; lat: number; lng: number }[]>([]);
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  useEffect(() => {
+    fetch('http://localhost:4000/api/reports')
+      .then(res => res.json())
+      .then(data => {
+        if(data.reports) setReports(data.reports);
+      }).catch(console.error);
+  }, []);
 
   const triggerSOS = async () => {
     // In a real app, this hits the Express backend to create an alert via Socket.io/REST
@@ -34,8 +44,20 @@ export default function HomeDashboard() {
         <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
           <MapIcon className="w-12 h-12 text-slate-600 mb-4 opacity-50" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {/* Heatmap Layer */}
+            {reports.map((r) => (
+              <div 
+                key={r.id} 
+                className="absolute w-24 h-24 rounded-full bg-red-500/30 blur-xl z-0"
+                style={{ 
+                  top: `${Math.max(10, Math.min(90, 50 + (r.lat - 28.6139) * 2000))}%`,
+                  left: `${Math.max(10, Math.min(90, 50 + (r.lng - 77.2090) * 2000))}%` 
+                }}
+              />
+            ))}
+            
             {/* User Location Marker with Pulse */}
-            <div className="relative flex items-center justify-center">
+            <div className="relative flex items-center justify-center z-10">
               <div className={`w-4 h-4 rounded-full z-10 ${alertActive ? 'bg-alert-crimson' : 'bg-beacon-amber'}`} />
               <div className={`absolute w-16 h-16 rounded-full border ${alertActive ? 'border-alert-crimson animate-pulse-fast' : 'border-beacon-amber animate-pulse-slow'}`} />
             </div>
@@ -101,6 +123,22 @@ export default function HomeDashboard() {
             <Navigation className="w-4 h-4" />
             <span>Plan Route</span>
           </button>
+          
+          <button 
+            onClick={() => router.push('/journey')}
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-blue-400 text-blue-300 bg-dusk-navy hover:bg-blue-400/10 transition-colors shadow-lg"
+          >
+            <Navigation className="w-4 h-4" />
+            <span>Journey Shield</span>
+          </button>
+
+          <button 
+            onClick={() => setShowReportModal(true)}
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-orange-400 text-orange-300 bg-dusk-navy hover:bg-orange-400/10 transition-colors shadow-lg"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Report</span>
+          </button>
         </div>
 
         <button
@@ -119,6 +157,50 @@ export default function HomeDashboard() {
       {/* Alert Full Screen Flash Effect */}
       {alertActive && (
         <div className="fixed inset-0 pointer-events-none bg-alert-crimson/20 animate-[pulse-fast_0.8s_ease-out_infinite] z-0" />
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-xl font-bold mb-4">Report an Incident</h2>
+            <div className="space-y-4">
+              <button 
+                onClick={() => {
+                  fetch('http://localhost:4000/api/reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: 28.6139 + (Math.random()-0.5)*0.04, lng: 77.2090 + (Math.random()-0.5)*0.04, category: 'Harassment', description: 'Anonymous report' })
+                  }).then(() => {
+                    setShowReportModal(false);
+                    fetch('http://localhost:4000/api/reports').then(r=>r.json()).then(d => {if(d.reports) setReports(d.reports)});
+                  });
+                }}
+                className="w-full py-3 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30 font-medium"
+              >
+                Harassment / Unsafe person
+              </button>
+              <button 
+                onClick={() => {
+                   fetch('http://localhost:4000/api/reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat: 28.6139 + (Math.random()-0.5)*0.04, lng: 77.2090 + (Math.random()-0.5)*0.04, category: 'Poor Lighting', description: 'Anonymous report' })
+                  }).then(() => {
+                    setShowReportModal(false);
+                    fetch('http://localhost:4000/api/reports').then(r=>r.json()).then(d => {if(d.reports) setReports(d.reports)});
+                  });
+                }}
+                className="w-full py-3 bg-orange-500/20 text-orange-400 rounded-xl hover:bg-orange-500/30 font-medium"
+              >
+                Poor Lighting / Dark Area
+              </button>
+              <button onClick={() => setShowReportModal(false)} className="w-full py-3 text-slate-400 font-medium mt-2">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

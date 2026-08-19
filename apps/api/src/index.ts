@@ -9,7 +9,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
-import { db, users, alerts, safePoints, trustedContacts } from 'db';
+import { db, users, alerts, safePoints, trustedContacts, journeys, journeyPings, communityReports } from 'db';
 import { eq, sql } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
 import { join, dirname } from 'path';
@@ -225,6 +225,130 @@ app.post('/api/alerts/resolve', authenticateToken, async (req: any, res: any) =>
   }
 });
 
+// --- JOURNEY SHIELD ENDPOINTS ---
+
+app.post('/api/journeys', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.sub;
+    const { destinationLat, destinationLng, expectedArrival } = req.body;
+    
+    const newJourney = {
+      id: crypto.randomUUID(),
+      userId,
+      destinationLat,
+      destinationLng,
+      expectedArrival: new Date(expectedArrival),
+      status: 'active'
+    };
+    
+    await db.insert(journeys).values(newJourney);
+    res.json({ success: true, journeyId: newJourney.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/journeys/:id/pings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { lat, lng } = req.body;
+    const userId = req.user.sub;
+    
+    await db.insert(journeyPings).values({
+      id: crypto.randomUUID(),
+      journeyId: id,
+      lat,
+      lng
+    });
+    
+    // Anomaly Detection: Check if past expected arrival or if stopped for too long (simulated via manual trigger for now)
+    const journeyRecord = await db.select().from(journeys).where(eq(journeys.id, id)).limit(1);
+    if (!journeyRecord || journeyRecord.length === 0) return res.status(404).json({ error: 'Not found' });
+    
+    let isAnomaly = false;
+    if (new Date() > journeyRecord[0].expectedArrival && journeyRecord[0].status === 'active') {
+       isAnomaly = true;
+    }
+    
+    // Explicit anomaly trigger via body (for hackathon demo)
+    if (req.body.simulateAnomaly) {
+       isAnomaly = true;
+    }
+    
+    if (isAnomaly && journeyRecord[0].status === 'active') {
+       // Mark as escalated
+       await db.update(journeys).set({ status: 'escalated' }).where(eq(journeys.id, id));
+       
+       // Trigger auto-alert
+       const newAlert = {
+         id: crypto.randomUUID(),
+         userId,
+         lat,
+         lng,
+         status: 'active',
+         urgencyScore: 90,
+         urgencyReason: 'Journey Shield auto-escalation (anomalous deviation or delay detected)'
+       };
+       await db.insert(alerts).values(newAlert);
+       
+       io.to(`guardian-${userId}`).emit('alert-triggered', {
+         alert: newAlert,
+         safePoints: [], // Mock empty for auto
+         prioritizedContacts: []
+       });
+       
+       return res.json({ success: true, escalated: true, alert: newAlert });
+    }
+    
+    res.json({ success: true, escalated: false });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/journeys/:id/arrived', authenticateToken, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    await db.update(journeys).set({ status: 'completed' }).where(eq(journeys.id, id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// --- COMMUNITY REPORTING ENDPOINTS ---
+
+app.post('/api/reports', async (req: any, res: any) => {
+  // Anonymous endpoint - no authenticateToken needed!
+  try {
+    const { lat, lng, category, description } = req.body;
+    await db.insert(communityReports).values({
+      id: crypto.randomUUID(),
+      lat,
+      lng,
+      category,
+      description
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.get('/api/reports', async (req: any, res: any) => {
+  try {
+    const reports = await db.select().from(communityReports);
+    res.json({ reports });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // Route Risk Scoring
 app.post('/api/route-risk', authenticateToken, async (req: any, res: any) => {
   try {
@@ -233,6 +357,11 @@ app.post('/api/route-risk', authenticateToken, async (req: any, res: any) => {
     // Fetch some safe points to pass as context
     const allSafePoints = await db.select().from(safePoints).limit(10);
     const safePointsContext = allSafePoints.map(sp => `${sp.type} at ${sp.lat},${sp.lng}`).join('; ');
+    
+    // Fetch nearby community reports
+    const recentReports = await db.select().from(communityReports).limit(10);
+    const reportsContext = recentReports.map(r => `${r.category}: ${r.description || ''}`).join('; ');
+    
     const hour = new Date().getHours();
     
     let riskLevel = 'medium';
@@ -248,7 +377,7 @@ app.post('/api/route-risk', authenticateToken, async (req: any, res: any) => {
           risk: z.enum(['low', 'medium', 'high']),
           reason: z.string()
         }),
-        prompt: `Evaluate the route risk for a user going from ${start || 'current location'} to ${destination}. The current hour is ${hour}. Nearby safe points: ${safePointsContext}. Context: ${contextText || 'None'}. Output risk level and a short, human-readable reason.`,
+        prompt: `Evaluate the route risk for a user going from ${start || 'current location'} to ${destination}. The current hour is ${hour}. Nearby safe points: ${safePointsContext}. Recent incident reports: ${reportsContext || 'None'}. Context: ${contextText || 'None'}. Output risk level and a short, human-readable reason.`,
         abortSignal: controller.signal
       });
       
