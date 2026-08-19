@@ -1,14 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ShieldAlert, Map as MapIcon, LogOut, Phone, Navigation, AlertTriangle } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+/**
+ * Represents a community incident report.
+ */
+interface Report {
+  id: string;
+  lat: number;
+  lng: number;
+  category?: string;
+  description?: string;
+}
+
+/**
+ * HomeDashboard Component
+ * The central hub for the user to trigger SOS alerts, view safety maps, and manage their journey.
+ */
 export default function HomeDashboard() {
   const router = useRouter();
   const [alertActive, setAlertActive] = useState(false);
-  const [reports, setReports] = useState<{ id: string; lat: number; lng: number }[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
@@ -19,13 +34,44 @@ export default function HomeDashboard() {
       }).catch(console.error);
   }, []);
 
+  /**
+   * Triggers a critical SOS alert.
+   */
   const triggerSOS = async () => {
     // In a real app, this hits the Express backend to create an alert via Socket.io/REST
     setAlertActive(true);
   };
 
+  /**
+   * Cancels the active SOS alert and marks the user as safe.
+   */
   const markSafe = () => {
     setAlertActive(false);
+  };
+
+  /**
+   * Submits a new incident report to the backend.
+   * @param category The type of incident (e.g., Harassment, Poor Lighting)
+   */
+  const submitReport = async (category: string) => {
+    try {
+      await fetch('http://localhost:4000/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          lat: 28.6139 + (Math.random()-0.5)*0.04, 
+          lng: 77.2090 + (Math.random()-0.5)*0.04, 
+          category, 
+          description: 'Anonymous report' 
+        })
+      });
+      setShowReportModal(false);
+      const res = await fetch('http://localhost:4000/api/reports');
+      const data = await res.json();
+      if(data.reports) setReports(data.reports);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -33,15 +79,19 @@ export default function HomeDashboard() {
       {/* Top Bar */}
       <header className="flex justify-between items-center mb-4 z-10">
         <h1 className="font-display font-bold text-2xl tracking-tight text-white">Kavach</h1>
-        <button onClick={() => signOut({ callbackUrl: "/" })} className="p-2 text-slate-400 hover:text-white">
-          <LogOut className="w-5 h-5" />
+        <button 
+          onClick={() => signOut({ callbackUrl: "/" })} 
+          className="p-2 text-slate-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-white rounded-md"
+          aria-label="Sign out"
+        >
+          <LogOut className="w-5 h-5" aria-hidden="true" />
         </button>
       </header>
 
       {/* Map Area */}
-      <div className="flex-1 rounded-3xl overflow-hidden relative border border-white/5 bg-slate-900 shadow-xl mb-24 z-10">
+      <section aria-label="Safety Map" className="flex-1 rounded-3xl overflow-hidden relative border border-white/5 bg-slate-900 shadow-xl mb-24 z-10">
         {/* Placeholder for Leaflet Map */}
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-800" aria-hidden="true">
           <MapIcon className="w-12 h-12 text-slate-600 mb-4 opacity-50" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             {/* Heatmap Layer */}
@@ -66,11 +116,15 @@ export default function HomeDashboard() {
 
         {/* Active Alert Overlay */}
         {alertActive && (
-          <div className="absolute inset-x-0 bottom-0 bg-dusk-navy/90 backdrop-blur-md border-t border-alert-crimson/30 p-4 animate-in slide-in-from-bottom-8">
+          <div 
+            role="alert" 
+            aria-live="assertive" 
+            className="absolute inset-x-0 bottom-0 bg-dusk-navy/90 backdrop-blur-md border-t border-alert-crimson/30 p-4 animate-in slide-in-from-bottom-8"
+          >
             <p className="text-center text-alert-crimson font-medium mb-4">Your trusted contacts have been notified</p>
             
             <h3 className="font-display font-bold text-sm text-slate-300 mb-2 uppercase tracking-wider">Nearest Safe Points</h3>
-            <ul className="space-y-2 mb-6">
+            <ul className="space-y-2 mb-6" aria-label="List of nearest safe points">
               {[
                 { name: "Sharma Medical Store", distance: "140m", type: "Pharmacy" },
                 { name: "Metro Security Desk", distance: "320m", type: "Guard" },
@@ -88,17 +142,18 @@ export default function HomeDashboard() {
 
             <button
               onClick={markSafe}
-              className="w-full py-4 bg-guardian-teal text-dusk-navy font-bold rounded-xl text-lg flex items-center justify-center shadow-lg"
+              className="w-full py-4 bg-guardian-teal text-dusk-navy font-bold rounded-xl text-lg flex items-center justify-center shadow-lg focus:outline-none focus:ring-4 focus:ring-guardian-teal/50"
+              aria-label="Cancel alert and mark as safe"
             >
               I&apos;m safe now
             </button>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Ambient Status Bar (Calm State) */}
       {!alertActive && (
-        <div className="absolute bottom-28 inset-x-0 flex justify-center pointer-events-none z-10">
+        <div aria-live="polite" className="absolute bottom-28 inset-x-0 flex justify-center pointer-events-none z-10">
           <div className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/5">
             <p className="text-xs font-mono text-slate-300">All quiet · last checked 2 min ago</p>
           </div>
@@ -106,37 +161,43 @@ export default function HomeDashboard() {
       )}
 
       {/* Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 inset-x-0 p-6 flex justify-between items-end z-20 pointer-events-none">
+      <nav aria-label="Primary safety actions" className="fixed bottom-0 inset-x-0 p-6 flex justify-between items-end z-20 pointer-events-none">
         <div className="flex flex-col space-y-3 pointer-events-auto">
           <button 
             onClick={() => router.push('/fake-call')}
-            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-guardian-teal text-guardian-teal bg-dusk-navy hover:bg-guardian-teal/10 transition-colors shadow-lg"
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-guardian-teal text-guardian-teal bg-dusk-navy hover:bg-guardian-teal/10 transition-colors shadow-lg focus:outline-none focus:ring-2 focus:ring-guardian-teal"
+            aria-label="Initiate fake call"
           >
-            <Phone className="w-4 h-4" />
+            <Phone className="w-4 h-4" aria-hidden="true" />
             <span>Fake Call</span>
           </button>
 
           <button 
             onClick={() => router.push('/plan-route')}
-            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-slate-400 text-slate-300 bg-dusk-navy hover:bg-white/10 transition-colors shadow-lg"
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-slate-400 text-slate-300 bg-dusk-navy hover:bg-white/10 transition-colors shadow-lg focus:outline-none focus:ring-2 focus:ring-slate-400"
+            aria-label="Plan safe route"
           >
-            <Navigation className="w-4 h-4" />
+            <Navigation className="w-4 h-4" aria-hidden="true" />
             <span>Plan Route</span>
           </button>
           
           <button 
             onClick={() => router.push('/journey')}
-            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-blue-400 text-blue-300 bg-dusk-navy hover:bg-blue-400/10 transition-colors shadow-lg"
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-blue-400 text-blue-300 bg-dusk-navy hover:bg-blue-400/10 transition-colors shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+            aria-label="Start Journey Shield"
           >
-            <Navigation className="w-4 h-4" />
+            <Navigation className="w-4 h-4" aria-hidden="true" />
             <span>Journey Shield</span>
           </button>
 
           <button 
             onClick={() => setShowReportModal(true)}
-            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-orange-400 text-orange-300 bg-dusk-navy hover:bg-orange-400/10 transition-colors shadow-lg"
+            aria-haspopup="dialog"
+            aria-expanded={showReportModal}
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-orange-400 text-orange-300 bg-dusk-navy hover:bg-orange-400/10 transition-colors shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
+            aria-label="Report an incident"
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-4 h-4" aria-hidden="true" />
             <span>Report</span>
           </button>
         </div>
@@ -144,58 +205,52 @@ export default function HomeDashboard() {
         <button
           onClick={triggerSOS}
           disabled={alertActive}
-          className={`pointer-events-auto flex items-center justify-center w-24 h-24 rounded-full shadow-2xl transition-all duration-300 ${
+          aria-label="Trigger SOS emergency alert"
+          className={`pointer-events-auto flex items-center justify-center w-24 h-24 rounded-full shadow-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-beacon-amber ${
             alertActive 
               ? 'bg-alert-crimson scale-90 opacity-0 pointer-events-none' 
               : 'bg-beacon-amber hover:bg-yellow-400 active:scale-95'
           }`}
         >
-          <ShieldAlert className="w-10 h-10 text-dusk-navy" />
+          <ShieldAlert className="w-10 h-10 text-dusk-navy" aria-hidden="true" />
         </button>
-      </div>
+      </nav>
 
       {/* Alert Full Screen Flash Effect */}
       {alertActive && (
-        <div className="fixed inset-0 pointer-events-none bg-alert-crimson/20 animate-[pulse-fast_0.8s_ease-out_infinite] z-0" />
+        <div aria-hidden="true" className="fixed inset-0 pointer-events-none bg-alert-crimson/20 animate-[pulse-fast_0.8s_ease-out_infinite] z-0" />
       )}
 
       {/* Report Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+        <div 
+          role="dialog" 
+          aria-modal="true" 
+          aria-labelledby="report-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto"
+        >
           <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm">
-            <h2 className="text-xl font-bold mb-4">Report an Incident</h2>
+            <h2 id="report-modal-title" className="text-xl font-bold mb-4">Report an Incident</h2>
             <div className="space-y-4">
               <button 
-                onClick={() => {
-                  fetch('http://localhost:4000/api/reports', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat: 28.6139 + (Math.random()-0.5)*0.04, lng: 77.2090 + (Math.random()-0.5)*0.04, category: 'Harassment', description: 'Anonymous report' })
-                  }).then(() => {
-                    setShowReportModal(false);
-                    fetch('http://localhost:4000/api/reports').then(r=>r.json()).then(d => {if(d.reports) setReports(d.reports)});
-                  });
-                }}
-                className="w-full py-3 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30 font-medium"
+                onClick={() => submitReport('Harassment')}
+                className="w-full py-3 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30 font-medium focus:outline-none focus:ring-2 focus:ring-red-400"
+                aria-label="Report harassment or unsafe person"
               >
                 Harassment / Unsafe person
               </button>
               <button 
-                onClick={() => {
-                   fetch('http://localhost:4000/api/reports', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat: 28.6139 + (Math.random()-0.5)*0.04, lng: 77.2090 + (Math.random()-0.5)*0.04, category: 'Poor Lighting', description: 'Anonymous report' })
-                  }).then(() => {
-                    setShowReportModal(false);
-                    fetch('http://localhost:4000/api/reports').then(r=>r.json()).then(d => {if(d.reports) setReports(d.reports)});
-                  });
-                }}
-                className="w-full py-3 bg-orange-500/20 text-orange-400 rounded-xl hover:bg-orange-500/30 font-medium"
+                onClick={() => submitReport('Poor Lighting')}
+                className="w-full py-3 bg-orange-500/20 text-orange-400 rounded-xl hover:bg-orange-500/30 font-medium focus:outline-none focus:ring-2 focus:ring-orange-400"
+                aria-label="Report poor lighting or dark area"
               >
                 Poor Lighting / Dark Area
               </button>
-              <button onClick={() => setShowReportModal(false)} className="w-full py-3 text-slate-400 font-medium mt-2">
+              <button 
+                onClick={() => setShowReportModal(false)} 
+                className="w-full py-3 text-slate-400 font-medium mt-2 focus:outline-none focus:ring-2 focus:ring-slate-400 rounded-xl"
+                aria-label="Cancel incident report"
+              >
                 Cancel
               </button>
             </div>
