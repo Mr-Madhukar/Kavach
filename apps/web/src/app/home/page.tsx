@@ -4,6 +4,16 @@ import React, { useState, useEffect } from "react";
 import { ShieldAlert, Map as MapIcon, LogOut, Phone, Navigation, AlertTriangle } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const MapComponent = dynamic(() => import("@/components/Map"), { 
+  ssr: false,
+  loading: () => (
+    <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+      <MapIcon className="w-12 h-12 text-slate-600 mb-4 opacity-50 animate-pulse" />
+    </div>
+  )
+});
 
 /**
  * Represents a community incident report.
@@ -90,28 +100,8 @@ export default function HomeDashboard() {
 
       {/* Map Area */}
       <section aria-label="Safety Map" className="flex-1 rounded-3xl overflow-hidden relative border border-white/5 bg-slate-900 shadow-xl mb-24 z-10">
-        {/* Placeholder for Leaflet Map */}
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-800" aria-hidden="true">
-          <MapIcon className="w-12 h-12 text-slate-600 mb-4 opacity-50" />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            {/* Heatmap Layer */}
-            {reports.map((r) => (
-              <div 
-                key={r.id} 
-                className="absolute w-24 h-24 rounded-full bg-red-500/30 blur-xl z-0"
-                style={{ 
-                  top: `${Math.max(10, Math.min(90, 50 + (r.lat - 28.6139) * 2000))}%`,
-                  left: `${Math.max(10, Math.min(90, 50 + (r.lng - 77.2090) * 2000))}%` 
-                }}
-              />
-            ))}
-            
-            {/* User Location Marker with Pulse */}
-            <div className="relative flex items-center justify-center z-10">
-              <div className={`w-4 h-4 rounded-full z-10 ${alertActive ? 'bg-alert-crimson' : 'bg-beacon-amber'}`} />
-              <div className={`absolute w-16 h-16 rounded-full border ${alertActive ? 'border-alert-crimson animate-pulse-fast' : 'border-beacon-amber animate-pulse-slow'}`} />
-            </div>
-          </div>
+        <div className="absolute inset-0 z-0">
+          <MapComponent reports={reports} alertActive={alertActive} />
         </div>
 
         {/* Active Alert Overlay */}

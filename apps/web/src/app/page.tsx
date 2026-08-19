@@ -1,6 +1,7 @@
 import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
 import { Shield } from "lucide-react";
+import Link from "next/link";
 
 export default async function Home() {
   const session = await auth();
@@ -65,7 +66,7 @@ export default async function Home() {
         </form>
 
         <p className="text-sm text-slate-500 max-w-xs mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy. Kavach only uses Google for secure sign-in.
+          By signing in, you agree to our <Link href="/terms" className="underline hover:text-slate-300 transition-colors">Terms of Service</Link> and <Link href="/privacy" className="underline hover:text-slate-300 transition-colors">Privacy Policy</Link>. Kavach only uses Google for secure sign-in.
         </p>
       </div>
     </main>
