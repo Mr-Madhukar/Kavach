@@ -2,8 +2,10 @@
   "name": "db",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "build": "tsc",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx seed.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
