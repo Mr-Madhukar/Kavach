@@ -1,7 +1,7 @@
 import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import { db, users } from "db"
-import { eq } from "drizzle-orm"
+
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [Google],
@@ -34,7 +34,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
     },
     async jwt({ token, profile }) {
-      if (profile) {
+      if (profile?.sub) {
         token.sub = profile.sub;
       }
       return token;
