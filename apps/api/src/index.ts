@@ -6,6 +6,9 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+import { generateObject } from 'ai';
+import { google } from '@ai-sdk/google';
 import { db, users, alerts, safePoints, trustedContacts } from 'db';
 import { eq, sql } from 'drizzle-orm';
 import * as dotenv from 'dotenv';
@@ -67,14 +70,20 @@ app.get('/api/health', (req, res) => {
 // Create Onboarding (Trusted Contacts & Home Base)
 app.post('/api/onboarding', authenticateToken, async (req: any, res: any) => {
   try {
-    const { contacts, homeLocation } = req.body;
+    const { contacts, homeLocation, duressCode } = req.body;
     const userId = req.user.sub;
 
+    const updates: any = {};
     if (homeLocation) {
-      await db.update(users).set({
-        homeLat: homeLocation.lat,
-        homeLng: homeLocation.lng
-      }).where(eq(users.id, userId));
+      updates.homeLat = homeLocation.lat;
+      updates.homeLng = homeLocation.lng;
+    }
+    if (duressCode) {
+      updates.duressCode = await bcrypt.hash(duressCode, 10);
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      await db.update(users).set(updates).where(eq(users.id, userId));
     }
 
     if (contacts && contacts.length > 0) {
@@ -99,15 +108,63 @@ app.post('/api/onboarding', authenticateToken, async (req: any, res: any) => {
 // Trigger SOS
 app.post('/api/alerts', authenticateToken, async (req: any, res: any) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, contextText, isDuress, inputDuressCode } = req.body;
     const userId = req.user.sub;
+
+    // Verify duress code if provided
+    if (isDuress && inputDuressCode) {
+      const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (user[0]?.duressCode) {
+        const match = await bcrypt.compare(inputDuressCode, user[0].duressCode);
+        if (!match) {
+           return res.status(401).json({ error: 'Invalid duress code' });
+        }
+      }
+    }
+
+    // AI Urgency Scoring with fallback
+    let urgencyScore = isDuress ? 100 : 50;
+    let urgencyReason = isDuress ? 'Silent duress code triggered' : 'Manual SOS triggered';
+
+    if (!isDuress && contextText) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+        
+        const result = await generateObject({
+          model: google('gemini-1.5-flash'),
+          schema: z.object({
+            score: z.number().min(0).max(100),
+            reason: z.string()
+          }),
+          prompt: `A user has triggered an SOS alert. They provided the following context: "${contextText}". Assess the urgency from 0-100 and provide a short reason.`,
+          abortSignal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        urgencyScore = result.object.score;
+        urgencyReason = result.object.reason;
+      } catch (err) {
+        // Fallback rule-based scorer
+        const lowerContext = contextText.toLowerCase();
+        if (lowerContext.includes('help') || lowerContext.includes('following') || lowerContext.includes('scared')) {
+           urgencyScore = 80;
+           urgencyReason = 'High risk keywords detected in context (fallback)';
+        } else {
+           urgencyScore = 60;
+           urgencyReason = 'SOS triggered with context (fallback)';
+        }
+      }
+    }
 
     const newAlert = {
       id: crypto.randomUUID(),
       userId,
       lat,
       lng,
-      status: 'active'
+      status: 'active',
+      urgencyScore,
+      urgencyReason
     };
 
     await db.insert(alerts).values(newAlert);
@@ -134,10 +191,15 @@ app.post('/api/alerts', authenticateToken, async (req: any, res: any) => {
         distanceText: sp.distanceKm < 1 ? `${Math.round(sp.distanceKm * 1000)}m` : `${sp.distanceKm.toFixed(1)}km`
       }));
 
+    // Mocking smart alert prioritization: fetch contacts and sort by a fake response history metric
+    const contacts = await db.select().from(trustedContacts).where(eq(trustedContacts.userId, userId));
+    const sortedContacts = contacts.sort((a, b) => Math.random() - 0.5); // Mock sort for now
+
     // Emit via Socket.io
     io.to(`guardian-${userId}`).emit('alert-triggered', {
       alert: newAlert,
-      safePoints: nearestSafePoints
+      safePoints: nearestSafePoints,
+      prioritizedContacts: sortedContacts
     });
 
     res.json({ success: true, alert: newAlert, nearestSafePoints });
@@ -157,6 +219,54 @@ app.post('/api/alerts/resolve', authenticateToken, async (req: any, res: any) =>
       
     io.to(`guardian-${userId}`).emit('alert-resolved', { userId });
     res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Route Risk Scoring
+app.post('/api/route-risk', authenticateToken, async (req: any, res: any) => {
+  try {
+    const { start, destination, contextText } = req.body;
+    
+    // Fetch some safe points to pass as context
+    const allSafePoints = await db.select().from(safePoints).limit(10);
+    const safePointsContext = allSafePoints.map(sp => `${sp.type} at ${sp.lat},${sp.lng}`).join('; ');
+    const hour = new Date().getHours();
+    
+    let riskLevel = 'medium';
+    let riskReason = 'Standard route precautions apply.';
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      const result = await generateObject({
+        model: google('gemini-1.5-flash'),
+        schema: z.object({
+          risk: z.enum(['low', 'medium', 'high']),
+          reason: z.string()
+        }),
+        prompt: `Evaluate the route risk for a user going from ${start || 'current location'} to ${destination}. The current hour is ${hour}. Nearby safe points: ${safePointsContext}. Context: ${contextText || 'None'}. Output risk level and a short, human-readable reason.`,
+        abortSignal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      riskLevel = result.object.risk;
+      riskReason = result.object.reason;
+    } catch (err) {
+      // Fallback
+      if (hour >= 22 || hour <= 4) {
+        riskLevel = 'high';
+        riskReason = 'Late night travel. Exercise caution. (fallback)';
+      } else {
+        riskLevel = 'low';
+        riskReason = 'Daytime travel. (fallback)';
+      }
+    }
+    
+    res.json({ risk: riskLevel, reason: riskReason });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });

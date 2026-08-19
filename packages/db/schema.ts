@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, doublePrecision, integer } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()), // We will use uuid or string ids
@@ -8,6 +8,7 @@ export const users = pgTable('users', {
   avatarUrl: text('avatar_url'),
   homeLat: doublePrecision('home_lat'),
   homeLng: doublePrecision('home_lng'),
+  duressCode: text('duress_code'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -24,6 +25,8 @@ export const alerts = pgTable('alerts', {
   lat: doublePrecision('lat').notNull(),
   lng: doublePrecision('lng').notNull(),
   status: text('status').notNull().default('active'), // active, resolved
+  urgencyScore: integer('urgency_score'),
+  urgencyReason: text('urgency_reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   resolvedAt: timestamp('resolved_at'),
 });

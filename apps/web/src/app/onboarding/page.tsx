@@ -9,6 +9,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [contacts, setContacts] = useState([{ name: "", phone: "" }]);
   const [homeLocation, setHomeLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [duressCode, setDuressCode] = useState("");
 
   const addContact = () => {
     if (contacts.length < 3) {
@@ -24,7 +25,7 @@ export default function Onboarding() {
 
   const completeOnboarding = async () => {
     // In a real app, we would send this data to the /api/onboarding endpoint
-    // await fetch('/api/onboarding', { method: 'POST', body: JSON.stringify({ contacts, homeLocation }) });
+    // await fetch('/api/onboarding', { method: 'POST', body: JSON.stringify({ contacts, homeLocation, duressCode }) });
     router.push("/home");
   };
 
@@ -122,6 +123,8 @@ export default function Onboarding() {
               </p>
               <input
                 type="text"
+                value={duressCode}
+                onChange={(e) => setDuressCode(e.target.value)}
                 placeholder="e.g. Pineapple"
                 className="w-full bg-dusk-navy border border-slate-muted focus:border-beacon-amber rounded-lg outline-none p-4 text-lg transition-colors"
               />

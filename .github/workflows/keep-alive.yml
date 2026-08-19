@@ -13,4 +13,4 @@ jobs:
     steps:
       - name: Ping API Endpoint
         # Replace 'https://your-render-api-url.onrender.com' with your actual Render URL
-        run: curl -s https://your-render-api-url.onrender.com/health || echo "Ping failed"
+        run: curl -s https://kavach-7yub.onrender.com/health || echo "Ping failed"

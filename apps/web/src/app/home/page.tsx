@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert, Map as MapIcon, LogOut } from "lucide-react";
+import { ShieldAlert, Map as MapIcon, LogOut, Phone, Navigation } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function HomeDashboard() {
+  const router = useRouter();
   const [alertActive, setAlertActive] = useState(false);
 
   const triggerSOS = async () => {
@@ -83,11 +85,23 @@ export default function HomeDashboard() {
 
       {/* Fixed Bottom Action Bar */}
       <div className="fixed bottom-0 inset-x-0 p-6 flex justify-between items-end z-20 pointer-events-none">
-        <button 
-          className="pointer-events-auto flex items-center space-x-2 px-6 py-3 rounded-full border border-guardian-teal text-guardian-teal bg-dusk-navy hover:bg-guardian-teal/10 transition-colors shadow-lg"
-        >
-          <span>Fake Call</span>
-        </button>
+        <div className="flex flex-col space-y-3 pointer-events-auto">
+          <button 
+            onClick={() => router.push('/fake-call')}
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-guardian-teal text-guardian-teal bg-dusk-navy hover:bg-guardian-teal/10 transition-colors shadow-lg"
+          >
+            <Phone className="w-4 h-4" />
+            <span>Fake Call</span>
+          </button>
+
+          <button 
+            onClick={() => router.push('/plan-route')}
+            className="flex items-center space-x-2 px-6 py-3 rounded-full border border-slate-400 text-slate-300 bg-dusk-navy hover:bg-white/10 transition-colors shadow-lg"
+          >
+            <Navigation className="w-4 h-4" />
+            <span>Plan Route</span>
+          </button>
+        </div>
 
         <button
           onClick={triggerSOS}
