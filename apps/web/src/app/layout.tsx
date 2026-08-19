@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Kavach - Personal Safety App",
+  title: "Kavach",
   description: "A comprehensive personal safety application designed to provide users with quick access to emergency services.",
   icons: {
     icon: [

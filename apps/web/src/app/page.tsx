@@ -29,7 +29,7 @@ export default async function Home() {
         </h1>
         
         <p className="text-lg text-slate-300 max-w-sm mb-8 font-body">
-          Your silent, intelligent safety net. Not just an alarm, but a companion that routes you to safety when it matters most.
+          Kavach is a personal safety application that allows users to send emergency SOS alerts, share live locations with trusted contacts, plan safe routes, and report community safety incidents.
         </p>
 
         <form
