@@ -30,7 +30,7 @@ async function run() {
     
     for (let i = 0; i < statements.length; i++) {
       console.log(`Executing statement ${i + 1}/${statements.length}...`);
-      await sql(statements[i] as any);
+      await sql.query(statements[i]);
     }
     
     console.log("All tables created successfully!");

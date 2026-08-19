@@ -1,7 +1,7 @@
 import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import { db, users } from "db"
-
+import { eq } from "drizzle-orm"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [Google],
@@ -14,7 +14,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       
       // Upsert user to the database safely
       try {
-        const { eq } = await import("drizzle-orm");
         const existing = await db.query.users.findFirst({
           where: (users, { eq, or }) => or(
             eq(users.googleSub, profile.sub!),

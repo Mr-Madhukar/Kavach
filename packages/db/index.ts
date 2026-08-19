@@ -1,5 +1,5 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/neon-http';
+import { neon } from '@neondatabase/serverless';
 import * as schema from './schema.js';
 import * as dotenv from 'dotenv';
 import { join, dirname } from 'path';
@@ -7,7 +7,12 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-dotenv.config({ path: join(__dirname, '../../.env') });
+
+const envPath = __dirname.endsWith('dist') 
+  ? join(__dirname, '../../../.env')
+  : join(__dirname, '../../.env');
+
+dotenv.config({ path: envPath });
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -15,8 +20,6 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is not defined in the environment variables');
 }
 
-// Disable prefetch as it is not supported for "Transaction" pool mode
-const client = postgres(connectionString, { prepare: false });
-
-export const db = drizzle(client, { schema });
+const sql = neon(connectionString);
+export const db = drizzle(sql, { schema });
 export * from './schema.js';
